@@ -63,7 +63,7 @@ class AudioFunctions: NSObject {
             pendingEvents.append(["event": fullName, "payload": payload])
             return
         }
-        NativePHPBridge.dispatchEvent(fullName, data: payload)
+        LaravelBridge.shared.send?(fullName, payload)
     }
 
     private static func trackPayload() -> [String: Any] {
@@ -388,14 +388,14 @@ class AudioFunctions: NSObject {
     }
 
     // MARK: - Bridge Functions
-    @objc static func Play(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handlePlay(_ parameters: [String: Any]) -> [String: Any] {
         playlist = [parameters]
         playlistIndex = -1
         playTrackAt(index: 0)
         return ["success": true]
     }
 
-    @objc static func PlayStream(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handlePlayStream(_ parameters: [String: Any]) -> [String: Any] {
         guard let mountpoint = stringParameter(parameters, keys: ["mountpoint", "url"]),
               let url = resolveStreamURL(from: mountpoint, parameters: parameters) else {
             return ["success": false, "error": "Invalid stream mountpoint or URL"]
@@ -429,7 +429,7 @@ class AudioFunctions: NSObject {
         return ["success": true]
     }
 
-    @objc static func Load(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleLoad(_ parameters: [String: Any]) -> [String: Any] {
         playlist = [parameters]
         playlistIndex = -1
         playTrackAt(index: 0)
@@ -437,14 +437,14 @@ class AudioFunctions: NSObject {
         return ["success": true]
     }
 
-    @objc static func Pause(_ parameters: [String: Any]) -> [String: Any] { player?.pause(); syncNowPlayingState(); sendEvent("PlaybackPaused", statePayload()); return ["success": true] }
-    @objc static func Resume(_ parameters: [String: Any]) -> [String: Any] { player?.play(); syncNowPlayingState(); sendEvent("PlaybackResumed", statePayload()); return ["success": true] }
-    @objc static func Stop(_ parameters: [String: Any]) -> [String: Any] { resetPlayer(); return ["success": true] }
-    @objc static func GetState(_ parameters: [String: Any]) -> [String: Any] { return statePayload() }
-    @objc static func GetDuration(_ parameters: [String: Any]) -> [String: Any] { return ["duration": durationSeconds()] }
-    @objc static func GetCurrentPosition(_ parameters: [String: Any]) -> [String: Any] { return ["position": positionSeconds()] }
+    @objc static func handlePause(_ parameters: [String: Any]) -> [String: Any] { player?.pause(); syncNowPlayingState(); sendEvent("PlaybackPaused", statePayload()); return ["success": true] }
+    @objc static func handleResume(_ parameters: [String: Any]) -> [String: Any] { player?.play(); syncNowPlayingState(); sendEvent("PlaybackResumed", statePayload()); return ["success": true] }
+    @objc static func handleStop(_ parameters: [String: Any]) -> [String: Any] { resetPlayer(); return ["success": true] }
+    @objc static func handleGetState(_ parameters: [String: Any]) -> [String: Any] { return statePayload() }
+    @objc static func handleGetDuration(_ parameters: [String: Any]) -> [String: Any] { return ["duration": durationSeconds()] }
+    @objc static func handleGetCurrentPosition(_ parameters: [String: Any]) -> [String: Any] { return ["position": positionSeconds()] }
 
-    @objc static func SetPlaylist(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleSetPlaylist(_ parameters: [String: Any]) -> [String: Any] {
         playlist = parameters["items"] as? [[String: Any]] ?? []
         playlistIndex = -1
         shuffledOrder = Array(0..<playlist.count)
@@ -454,30 +454,30 @@ class AudioFunctions: NSObject {
         return ["success": true]
     }
 
-    @objc static func NextTrack(_ parameters: [String: Any]) -> [String: Any] { nextTrackInternal(); return ["success": true] }
-    @objc static func PreviousTrack(_ parameters: [String: Any]) -> [String: Any] { if playlistIndex > 0 { playTrackAt(index: playlistIndex - 1) }; return ["success": true] }
-    @objc static func SkipTrack(_ parameters: [String: Any]) -> [String: Any] { if let idx = parameters["index"] as? Int { playTrackAt(index: idx) }; return ["success": true] }
+    @objc static func handleNextTrack(_ parameters: [String: Any]) -> [String: Any] { nextTrackInternal(); return ["success": true] }
+    @objc static func handlePreviousTrack(_ parameters: [String: Any]) -> [String: Any] { if playlistIndex > 0 { playTrackAt(index: playlistIndex - 1) }; return ["success": true] }
+    @objc static func handleSkipTrack(_ parameters: [String: Any]) -> [String: Any] { if let idx = parameters["index"] as? Int { playTrackAt(index: idx) }; return ["success": true] }
     
-    @objc static func GetTrack(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleGetTrack(_ parameters: [String: Any]) -> [String: Any] {
         guard let idx = parameters["index"] as? Int, idx < playlist.count else { return [:] }
         return ["track": playlist[effectiveIndex(idx)]]
     }
 
-    @objc static func GetActiveTrack(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleGetActiveTrack(_ parameters: [String: Any]) -> [String: Any] {
         return playlistIndex >= 0 ? ["track": trackPayload()] : [:]
     }
 
-    @objc static func GetActiveTrackIndex(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleGetActiveTrackIndex(_ parameters: [String: Any]) -> [String: Any] {
         return playlistIndex >= 0 ? ["index": playlistIndex] : [:]
     }
 
-    @objc static func GetPlaylist(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleGetPlaylist(_ parameters: [String: Any]) -> [String: Any] {
         return ["items": playlist, "index": playlistIndex, "total": playlist.count, "repeatMode": repeatMode, "shuffleMode": shuffleMode]
     }
 
-    @objc static func SetRepeatMode(_ parameters: [String: Any]) -> [String: Any] { repeatMode = parameters["mode"] as? String ?? "none"; return ["success": true] }
+    @objc static func handleSetRepeatMode(_ parameters: [String: Any]) -> [String: Any] { repeatMode = parameters["mode"] as? String ?? "none"; return ["success": true] }
 
-    @objc static func Seek(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleSeek(_ parameters: [String: Any]) -> [String: Any] {
         if let seconds = (parameters["seconds"] as? NSNumber)?.doubleValue {
             player?.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
             syncNowPlayingState()
@@ -485,7 +485,7 @@ class AudioFunctions: NSObject {
         return ["success": true]
     }
 
-    @objc static func SetVolume(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleSetVolume(_ parameters: [String: Any]) -> [String: Any] {
         if let level = (parameters["level"] as? NSNumber)?.floatValue {
             userVolume = level
             player?.volume = level
@@ -507,18 +507,18 @@ class AudioFunctions: NSObject {
         refreshNowPlayingInfo()
     }
 
-    @objc static func SetMetadata(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleSetMetadata(_ parameters: [String: Any]) -> [String: Any] {
         applyMetadata(parameters)
         return ["success": true]
     }
 
-    @objc static func UpdateStreamMetadata(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleUpdateStreamMetadata(_ parameters: [String: Any]) -> [String: Any] {
         applyMetadata(parameters, includeClassicalFields: false)
         sendEvent("StreamMetadataChanged", ["track": trackPayload(), "metadata": parameters])
         return ["success": true]
     }
 
-    @objc static func SetPlaybackRate(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleSetPlaybackRate(_ parameters: [String: Any]) -> [String: Any] {
         if let rate = (parameters["rate"] as? NSNumber)?.floatValue {
             playbackRate = rate
             if player?.rate ?? 0 > 0 {
@@ -528,7 +528,7 @@ class AudioFunctions: NSObject {
         return ["success": true]
     }
 
-    @objc static func AppendTrack(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleAppendTrack(_ parameters: [String: Any]) -> [String: Any] {
         if let track = parameters["track"] as? [String: Any] {
             playlist.append(track)
             shuffledOrder = Array(0..<playlist.count)
@@ -537,7 +537,7 @@ class AudioFunctions: NSObject {
         return ["success": true]
     }
 
-    @objc static func RemoveTrack(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleRemoveTrack(_ parameters: [String: Any]) -> [String: Any] {
         if let idx = parameters["index"] as? Int, idx < playlist.count {
             playlist.remove(at: idx)
             if playlistIndex == idx { resetPlayer() }
@@ -548,20 +548,20 @@ class AudioFunctions: NSObject {
         return ["success": true]
     }
 
-    @objc static func PlayTrackAt(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handlePlayTrackAt(_ parameters: [String: Any]) -> [String: Any] {
         if let idx = parameters["index"] as? Int {
             playTrackAt(index: idx)
         }
         return ["success": true]
     }
-    @objc static func SetShuffleMode(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleSetShuffleMode(_ parameters: [String: Any]) -> [String: Any] {
         shuffleMode = parameters["shuffle"] as? Bool ?? false
         shuffledOrder = Array(0..<playlist.count)
         if shuffleMode { shuffledOrder.shuffle() }
         return ["success": true]
     }
 
-    @objc static func SetSleepTimer(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleSetSleepTimer(_ parameters: [String: Any]) -> [String: Any] {
         let seconds = (parameters["seconds"] as? NSNumber)?.doubleValue ?? 0
         cancelSleepTimer()
         if seconds > 0 {
@@ -572,11 +572,202 @@ class AudioFunctions: NSObject {
         return ["success": true]
     }
 
-    @objc static func CancelSleepTimer(_ parameters: [String: Any]) -> [String: Any] { cancelSleepTimer(); return ["success": true] }
-    @objc static func DrainEvents(_ parameters: [String: Any]) -> [String: Any] { let events = pendingEvents; pendingEvents = []; return ["events": events] }
-    @objc static func SetProgressInterval(_ parameters: [String: Any]) -> [String: Any] {
+    @objc static func handleCancelSleepTimer(_ parameters: [String: Any]) -> [String: Any] { cancelSleepTimer(); return ["success": true] }
+    @objc static func handleDrainEvents(_ parameters: [String: Any]) -> [String: Any] { let events = pendingEvents; pendingEvents = []; return ["events": events] }
+    @objc static func handleSetProgressInterval(_ parameters: [String: Any]) -> [String: Any] {
         progressInterval = (parameters["seconds"] as? NSNumber)?.doubleValue ?? 1.0
         if player?.rate ?? 0 > 0 { startProgressTimer() }
         return ["success": true]
     }
+}
+
+// MARK: - NativePHP Bridge Functions
+
+extension AudioFunctions {
+    class Play: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handlePlay(parameters)
+        }
+    }
+
+    class PlayStream: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handlePlayStream(parameters)
+        }
+    }
+
+    class PlayTrackAt: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handlePlayTrackAt(parameters)
+        }
+    }
+
+    class Pause: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handlePause(parameters)
+        }
+    }
+
+    class Resume: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleResume(parameters)
+        }
+    }
+
+    class Stop: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleStop(parameters)
+        }
+    }
+
+    class Seek: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleSeek(parameters)
+        }
+    }
+
+    class SetVolume: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleSetVolume(parameters)
+        }
+    }
+
+    class GetDuration: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleGetDuration(parameters)
+        }
+    }
+
+    class GetCurrentPosition: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleGetCurrentPosition(parameters)
+        }
+    }
+
+    class SetMetadata: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleSetMetadata(parameters)
+        }
+    }
+
+    class UpdateStreamMetadata: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleUpdateStreamMetadata(parameters)
+        }
+    }
+
+    class SetPlaylist: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleSetPlaylist(parameters)
+        }
+    }
+
+    class NextTrack: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleNextTrack(parameters)
+        }
+    }
+
+    class PreviousTrack: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handlePreviousTrack(parameters)
+        }
+    }
+
+    class SetSleepTimer: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleSetSleepTimer(parameters)
+        }
+    }
+
+    class SetPlaybackRate: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleSetPlaybackRate(parameters)
+        }
+    }
+
+    class Load: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleLoad(parameters)
+        }
+    }
+
+    class GetState: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleGetState(parameters)
+        }
+    }
+
+    class SetRepeatMode: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleSetRepeatMode(parameters)
+        }
+    }
+
+    class SetShuffleMode: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleSetShuffleMode(parameters)
+        }
+    }
+
+    class AppendTrack: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleAppendTrack(parameters)
+        }
+    }
+
+    class RemoveTrack: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleRemoveTrack(parameters)
+        }
+    }
+
+    class SetProgressInterval: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleSetProgressInterval(parameters)
+        }
+    }
+
+    class DrainEvents: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleDrainEvents(parameters)
+        }
+    }
+
+    class SkipTrack: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleSkipTrack(parameters)
+        }
+    }
+
+    class GetTrack: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleGetTrack(parameters)
+        }
+    }
+
+    class GetActiveTrack: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleGetActiveTrack(parameters)
+        }
+    }
+
+    class GetActiveTrackIndex: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleGetActiveTrackIndex(parameters)
+        }
+    }
+
+    class GetPlaylist: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleGetPlaylist(parameters)
+        }
+    }
+
+    class CancelSleepTimer: BridgeFunction {
+        func execute(parameters: [String: Any]) throws -> [String: Any] {
+            AudioFunctions.handleCancelSleepTimer(parameters)
+        }
+    }
+
 }
